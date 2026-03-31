@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Drain System — South Africa</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="logo">
+    <span class="logo-icon">🌧️</span>
+    <div>
+      <div class="logo-title">SmartDrain</div>
+      <div class="logo-sub">ZA Flood Intelligence</div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <a href="#overview"    class="nav-item active" data-section="overview">   <span class="nav-icon">📊</span> Overview   </a>
+    <a href="#water"       class="nav-item"         data-section="water">      <span class="nav-icon">💧</span> Water Level </a>
+    <a href="#rainfall"    class="nav-item"         data-section="rainfall">   <span class="nav-icon">🌦️</span> Rainfall    </a>
+    <a href="#predictions" class="nav-item"         data-section="predictions"><span class="nav-icon">🤖</span> ML Predict  </a>
+    <a href="#alerts"      class="nav-item"         data-section="alerts">     <span class="nav-icon">🔔</span> Alerts      </a>
+    <a href="#system"      class="nav-item"         data-section="system">     <span class="nav-icon">⚙️</span> System      </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="conn-dot" id="connDot"></div>
+    <span id="connLabel">Connecting…</span>
+  </div>
+</aside>
+
+<!-- ── Main ────────────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- Header -->
+  <header class="topbar">
+    <div>
+      <h1 class="page-title" id="pageTitle">Overview</h1>
+      <p class="page-sub" id="pageSub">Real-time drain monitoring · South Africa</p>
+    </div>
+    <div class="topbar-right">
+      <div class="time-badge" id="liveClock"></div>
+      <div class="risk-badge" id="globalRisk">SAFE</div>
+    </div>
+  </header>
+
+  <!-- ── KPI Row ── -->
+  <section class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-icon">💧</div>
+      <div class="kpi-body">
+        <div class="kpi-value" id="kpiWater">--</div>
+        <div class="kpi-label">Water Level (cm)</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🌧️</div>
+      <div class="kpi-body">
+        <div class="kpi-value" id="kpiRain">--</div>
+        <div class="kpi-label">Rainfall (mm)</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🔮</div>
+      <div class="kpi-body">
+        <div class="kpi-value" id="kpiPredicted">--</div>
+        <div class="kpi-label">Predicted Level (cm)</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🗄️</div>
+      <div class="kpi-body">
+        <div class="kpi-value" id="kpiRecords">--</div>
+        <div class="kpi-label">Dataset Records</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🎯</div>
+      <div class="kpi-body">
+        <div class="kpi-value" id="kpiR2">--</div>
+        <div class="kpi-label">Model R² Score</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">🚰</div>
+      <div class="kpi-body">
+        <div class="kpi-value" id="kpiValve">--</div>
+        <div class="kpi-label">Valve Status</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Charts Grid ── -->
+  <section class="charts-grid">
+
+    <!-- Water Level Timeline -->
+    <div class="chart-card span2">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">💧 Water Level — Live Feed</div>
+          <div class="chart-sub">Last 50 readings (updates every 3s)</div>
+        </div>
+        <div class="chart-badge" id="wlBadge">LIVE</div>
+      </div>
+      <canvas id="waterLevelChart"></canvas>
+    </div>
+
+    <!-- Gauge -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">🌡️ Level Gauge</div>
+      </div>
+      <div class="gauge-wrap">
+        <canvas id="gaugeChart"></canvas>
+        <div class="gauge-center" id="gaugeLabel">-- cm</div>
+      </div>
+    </div>
+
+    <!-- Rainfall Bar -->
+    <div class="chart-card span2">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">🌦️ Monthly Rainfall — Past 12 Months</div>
+          <div class="chart-sub" id="rainfallDatasetNote">Loading dataset…</div>
+        </div>
+      </div>
+      <canvas id="rainfallChart"></canvas>
+    </div>
+
+    <!-- Prediction confidence -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">🤖 Prediction Confidence</div>
+        <div class="chart-sub">ML model output</div>
+      </div>
+      <canvas id="predictionChart"></canvas>
+    </div>
+
+    <!-- Province rainfall heatmap (bar) -->
+    <div class="chart-card span2">
+      <div class="chart-header">
+        <div class="chart-title">🗺️ Rainfall by Province (30-day avg)</div>
+      </div>
+      <canvas id="provinceChart"></canvas>
+    </div>
+
+    <!-- ML Stats -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">📈 Model Performance</div>
+      </div>
+      <canvas id="modelChart"></canvas>
+    </div>
+
+  </section>
+
+  <!-- ── Alerts Table ── -->
+  <section class="table-section">
+    <div class="section-header">
+      <div class="chart-title">🔔 Recent Alerts</div>
+      <button class="btn-small" onclick="loadAlerts()">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="alertsTable">
+        <thead>
+          <tr>
+            <th>⏱ Time</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Message</th>
+            <th>Water Level</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="alertsBody">
+          <tr><td colspan="6" class="loading-row">Loading alerts…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Dataset Info ── -->
+  <section class="table-section">
+    <div class="section-header">
+      <div class="chart-title">🗄️ Dataset Information</div>
+    </div>
+    <div class="dataset-grid" id="datasetGrid">
+      <div class="ds-card"><div class="ds-label">Source</div><div class="ds-val" id="dsSource">—</div></div>
+      <div class="ds-card"><div class="ds-label">Total Records</div><div class="ds-val" id="dsRecords">—</div></div>
+      <div class="ds-card"><div class="ds-label">Earliest Date</div><div class="ds-val" id="dsEarliest">—</div></div>
+      <div class="ds-card"><div class="ds-label">Latest Date</div><div class="ds-val" id="dsLatest">—</div></div>
+      <div class="ds-card"><div class="ds-label">Full Dataset</div><div class="ds-val" id="dsFull">—</div></div>
+      <div class="ds-card"><div class="ds-label">5-Year Subset</div><div class="ds-val" id="dsRecent">—</div></div>
+    </div>
+  </section>
+
+  <!-- ── System Status ── -->
+  <section class="system-section">
+    <div class="chart-title" style="margin-bottom:1rem">⚙️ System Status</div>
+    <div class="sys-grid">
+      <div class="sys-card" id="sysESP32">
+        <div class="sys-icon">📡</div>
+        <div class="sys-label">ESP32 Sensor</div>
+        <div class="sys-status">--</div>
+      </div>
+      <div class="sys-card" id="sysCAM">
+        <div class="sys-icon">📷</div>
+        <div class="sys-label">ESP32-CAM</div>
+        <div class="sys-status">--</div>
+      </div>
+      <div class="sys-card" id="sysPI">
+        <div class="sys-icon">🖥️</div>
+        <div class="sys-label">Raspberry Pi</div>
+        <div class="sys-status">--</div>
+      </div>
+      <div class="sys-card" id="sysBatt">
+        <div class="sys-icon">🔋</div>
+        <div class="sys-label">Battery</div>
+        <div class="sys-status">--</div>
+      </div>
+      <div class="sys-card" id="sysSolar">
+        <div class="sys-icon">☀️</div>
+        <div class="sys-label">Solar Charging</div>
+        <div class="sys-status">--</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
+</body>
+</html>
